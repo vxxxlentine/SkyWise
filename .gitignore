@@ -1,0 +1,4 @@
+Secrets.xcconfig
+.DS_Store
+xcuserdata/
+*.xcuserstate
