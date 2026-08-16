@@ -1,7 +1,7 @@
 import CoreLocation
 import Combine
 
-class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
+class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate, LocationManagerProtocol {
     private let manager = CLLocationManager()
     
     @Published var location: CLLocationCoordinate2D?
@@ -51,3 +51,8 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     }
 }
 
+protocol LocationManagerProtocol: ObservableObject {
+    var location: CLLocationCoordinate2D? { get }
+    var denied: Bool { get }
+    func requestLocation()
+}

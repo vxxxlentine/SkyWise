@@ -43,12 +43,6 @@ struct ForecastMain: Decodable {
 
 extension ForecastItem {
     func icon(dayPeriod: DayPeriod) -> String {
-        let condition = weather.first?.main.lowercased() ?? ""
-        switch condition {
-        case let s where s.contains("rain"):   return "cloud.rain.fill"
-        case let s where s.contains("cloud"):  return "cloud.fill"
-        case let s where s.contains("clear"):  return dayPeriod == .night ? "moon.stars.fill" : "sun.max.fill"
-        default: return "cloud.fill"
+        WeatherIconMapper.symbol(for: weather.first?.main ?? "", dayPeriod: dayPeriod)
         }
     }
-}

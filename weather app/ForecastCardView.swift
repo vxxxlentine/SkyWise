@@ -9,7 +9,7 @@ struct ForecastCardView: View {
     
     private var formattedTime:String {
         let formatter = DateFormatter()
-        formatter.dateFormat = "yyy-MM-dd HH:mm:ss"
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
         formatter.timeZone = TimeZone(secondsFromGMT: 0)
         
         guard let date = formatter.date(from: time) else { return time }
@@ -41,3 +41,4 @@ struct ForecastCardView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 }
+

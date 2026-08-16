@@ -2,6 +2,10 @@ import SwiftUI
 import Combine
 import CoreLocation
 
+enum WeatherAnimation {
+    case rain, snow, thunder, cloud, sun, moon, none
+}
+
 // MARK: - Main Screen
 
 struct WeatherView: View {
@@ -10,19 +14,40 @@ struct WeatherView: View {
     @StateObject var locationManager = LocationManager()
 
     @State private var city = UserDefaults.standard.string(forKey: "lastCity") ?? ""
+    
+    private var gradientColors: [Color] {
+        switch vm.dayPeriod {
+        case .morning: return [Color(hex: "FF9A5C"), Color(hex: "C0678A")]
+        case .day:     return [Color(hex: "6FA8DC"), Color(hex: "3D6FA0")]
+        case .evening: return [Color(hex: "FF6B35"), Color(hex: "2C1654")]
+        case .night:   return [Color(hex: "1C1C2E"), Color(hex: "0A0A12")]
+        }
+    }
+
+    private var weatherAnimation: WeatherAnimation {
+        switch vm.condition.lowercased() {
+        case let s where s.contains("thunderstorm"): return .thunder
+        case let s where s.contains("rain"):         return .rain
+        case let s where s.contains("snow"):         return .snow
+        case let s where s.contains("cloud"):        return .cloud
+        case let s where s.contains("clear"):        return vm.dayPeriod == .night ? .moon : .sun
+        default:                                     return .none
+        }
+    }
 
     var body: some View {
         ZStack {
 
             LinearGradient(
-                colors: vm.gradientColors,
+                colors: gradientColors,
                 startPoint: .top,
                 endPoint: .bottom
             )
             .ignoresSafeArea()
             .animation(.easeOut(duration: 1.5), value: vm.dayPeriod)
 
-            VStack(spacing: 18) {
+            
+            VStack(spacing: 27) {
 
                 Text(vm.cityName.isEmpty ? city : vm.cityName)
                     .font(.system(size: 22, weight: .medium))
@@ -37,8 +62,17 @@ struct WeatherView: View {
                 Text(vm.condition)
                     .font(.system(size: 24, weight: .regular))
                     .foregroundColor(.white.opacity(0.75))
+                
+                switch weatherAnimation {
+                case .rain:    RainView().frame(height: 50)
+                case .snow:    SnowView().frame(height: 50)
+                case .thunder: ThunderView().frame(height: 50)
+                case .cloud:   CloudView().frame(height: 50)
+                case .sun:     SunView().frame(height: 50)
+                case .moon:    MoonView().frame(height: 50)
+                case .none:    EmptyView()
+                }
 
-                ScrollView(.horizontal) {
                     HStack {
                         ForEach(vm.forecast.prefix(5), id: \.dt_txt) { item in
                             ForecastCardView(
@@ -49,22 +83,11 @@ struct WeatherView: View {
                             )
                         }
                     }
-                }
-                .frame(height: 110)
-
+                .frame(height: 170)
+                
                 if vm.isLoading {
                     ProgressView()
                         .tint(.white)
-                }
-
-                switch vm.weatherAnimation {
-                case .rain:    RainView().frame(height: 200)
-                case .snow:    SnowView().frame(height: 200)
-                case .thunder: ThunderView().frame(height: 200)
-                case .cloud:   CloudView().frame(height: 200)
-                case .sun:     SunView().frame(height: 200)
-                case .moon:    MoonView().frame(height: 200)
-                case .none:    EmptyView()
                 }
 
                 // MARK: - Location Search Button
@@ -90,12 +113,13 @@ struct WeatherView: View {
                             )
                     )
                 }
+                .padding(.top, 20)
                 .padding(.horizontal, 40)
 
                 // MARK: - Search Bar
 
                 HStack(spacing: 12) {
-                    Image(systemName: /*"/*magnifyingglass"*/*/ "globe.desk.fill")
+                    Image(systemName: "globe.desk.fill")
                         .foregroundColor(.white.opacity(0.6))
                         .font(.system(size: 18, weight: .medium))
 
@@ -139,7 +163,8 @@ struct WeatherView: View {
                 Button(action: {
                     UserDefaults.standard.set(city, forKey: "lastCity")
                     Task {
-                        await vm.loadAllWeatherData(for: city)
+                        await vm.loadAllWeatherData(for:
+                                .city(city))
                     }
                 }) {
                     HStack(spacing: 8) {
@@ -170,16 +195,18 @@ struct WeatherView: View {
         }
         .task {
             guard !city.isEmpty else { return }
-            await vm.loadAllWeatherData(for: city)
+            await vm.loadAllWeatherData(for:
+                    .city(city))
         }
         .refreshable {
-            await vm.loadAllWeatherData(for: city)
+            await vm.loadAllWeatherData(for:
+                    .city(city))
         }
         .onChange(of: locationManager.location) { newLocation in
             guard let coord = newLocation else { return }
             Task {
-                await vm.fetchWeatherByLocation(lat: coord.latitude, lon: coord.longitude)
-                await vm.fetchForecastByLocation(lat: coord.latitude, lon: coord.longitude)
+                await vm.fetchWeather(for: .coordinates(lat: coord.latitude, lon: coord.longitude))
+                await vm.fetchForecast(for: .coordinates(lat: coord.latitude, lon: coord.longitude))
                 self.city = ""
             }
         }
@@ -188,17 +215,8 @@ struct WeatherView: View {
                 vm.errorMessage = "Location access denied"
             }
         }
-        .onChange(of: locationManager.denied) { denied in
-            if !denied {
-                if let coord = locationManager.location {
-                    Task {
-                        await vm.fetchWeatherByLocation(lat: coord.latitude, lon: coord.longitude)
-                        await vm.fetchForecastByLocation(lat: coord.latitude, lon: coord.longitude)
-                    }
-                }
-            }
-        }
     }
+    
 }
 
 extension CLLocationCoordinate2D: Equatable {
@@ -207,189 +225,6 @@ extension CLLocationCoordinate2D: Equatable {
     }
 }
 
-// MARK: - Weather Animations
-
-struct RainView: View {
-
-    @State private var offsetX: CGFloat = -20
-
-    var body: some View {
-        Image(systemName: "cloud.rain.fill")
-            .resizable()
-            .scaledToFit()
-            .foregroundStyle(.white.opacity(0.8))
-            .offset(y: offsetX)
-            .onAppear {
-                withAnimation(
-                    .easeInOut(duration: 3)
-                        .repeatForever(autoreverses: true)
-                ) {
-                    offsetX = 20
-                }
-            }
-    }
-}
-
-struct MiniCloudView: View {
-
-    @State private var offsetX: CGFloat = -20
-
-    var body: some View {
-        Image(systemName: "cloud.fill")
-            .resizable()
-            .scaledToFit()
-            .foregroundStyle(.white.opacity(0.8))
-            .offset(x: offsetX)
-            .onAppear {
-                withAnimation(
-                    .easeInOut(duration: 3)
-                        .repeatForever(autoreverses: true)
-                ) {
-                    offsetX = 20
-                }
-            }
-    }
-}
-
-struct CloudView: View {
-    var body: some View {
-        ZStack {
-            MiniCloudView()
-                .scaleEffect(1.0)
-
-            MiniCloudView()
-                .scaleEffect(0.7)
-                .offset(x: 80, y: 30)
-
-            MiniCloudView()
-                .scaleEffect(0.6)
-                .offset(x: -90, y: 20)
-        }
-    }
-}
-
-struct SunView: View {
-
-    @State private var scale = 1.0
-
-    var body: some View {
-        Image(systemName: "sun.max.fill")
-            .resizable()
-            .scaledToFit()
-            .foregroundStyle(.yellow)
-            .scaleEffect(scale)
-            .onAppear {
-                withAnimation(
-                    .easeInOut(duration: 2)
-                        .repeatForever(autoreverses: true)
-                ) {
-                    scale = 1.15
-                }
-            }
-    }
-}
-
-struct MoonView: View {
-
-    @State private var offsetX: CGFloat = 30
-    @State private var opacity: Double = 0.5
-
-    var body: some View {
-        ZStack {
-            Image(systemName: "cloud.fill")
-                .resizable()
-                .scaledToFit()
-                .foregroundStyle(.white.opacity(0.3))
-                .offset(x: -60, y: -10)
-
-            Image(systemName: "moon.stars.fill")
-                .resizable()
-                .scaledToFit()
-                .foregroundStyle(.white)
-                .shadow(color: .white.opacity(0.5), radius: 40)
-                .offset(x: offsetX)
-                .opacity(opacity)
-
-            Image(systemName: "cloud.fill")
-                .resizable()
-                .scaledToFit()
-                .foregroundStyle(.white.opacity(0.2))
-                .offset(x: 50, y: 5)
-        }
-        .onAppear {
-            withAnimation(
-                .easeInOut(duration: 4)
-                    .repeatForever(autoreverses: true)
-            ) {
-                offsetX = -30
-                opacity = 1.0
-            }
-        }
-    }
-}
-
-struct SnowView: View {
-
-    @State private var offsetY: CGFloat = -20
-    @State private var opacity: Double = 0.6
-
-    var body: some View {
-        Image(systemName: "snowflake")
-            .resizable()
-            .scaledToFit()
-            .foregroundStyle(.white.opacity(opacity))
-            .offset(y: offsetY)
-            .onAppear {
-                withAnimation(
-                    .easeInOut(duration: 3)
-                        .repeatForever(autoreverses: true)
-                ) {
-                    offsetY = 20
-                    opacity = 1.0
-                }
-            }
-    }
-}
-
-struct ThunderView: View {
-
-    @State private var opacity: Double = 1.0
-    @State private var offsetX: CGFloat = -20
-    
-    var body: some View {
-        Image(systemName: "cloud.bolt.fill")
-            .resizable()
-            .scaledToFit()
-            .foregroundStyle(.white.opacity(opacity))
-            .offset(x: offsetX)
-            .onAppear {
-                withAnimation(
-                    .easeInOut(duration: 3)
-                        .repeatForever(autoreverses: true)
-                ) {
-                    offsetX = 20
-                    opacity = 0.4
-                }
-            }
-    }
-}
-
-//#Preview {
-//    WeatherView()
-//}
-//#Preview("Snow") {
-//    ZStack {
-//        Color.blue.ignoresSafeArea()
-//        SnowView().frame(height: 200)
-//    }
-//}
-
-//#Preview("Thunder") {
-//    ZStack {
-//        Color(hex: "2C1654").ignoresSafeArea()
-//        ThunderView().frame(height: 200)
-//    }
-//}
 
 #Preview {
     WeatherView()

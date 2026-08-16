@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct weather_appApp: App {
+struct SkyWiseApp: App {
     var body: some Scene {
         WindowGroup {
             WeatherView()
